@@ -54,6 +54,7 @@ export function useGameState() {
     if (update.actions)   setActions(update.actions);
     if (update.scouted)   setScouted(update.scouted);
     if (update.battleLog) setBattleLog(update.battleLog);
+    if (update.leaders)   setLeaders(update.leaders);
   }, []);
 
   const buildState = useCallback(() => ({
@@ -76,22 +77,23 @@ export function useGameState() {
     let ts = terrs.map(t => ({ ...t, army: { ...t.army } }));
     let g = { ...gold };
     let f = { ...food };
+    let ldr = { ...leaders };
 
     // Auto-manage player territories
     const autoIds = Object.keys(autoManaged).filter(id => autoManaged[id]);
     if (autoIds.length) {
-      const am = autoManageTurn(ts, autoIds, g, f, addLog, leaders);
+      const am = autoManageTurn(ts, autoIds, g, f, addLog, ldr);
       ts = am.ts; g = am.gold; f = am.food;
     }
 
-    // AI turns
-    const r1 = aiTurn(ts, "ai1", g, f, addLog, leaders);
-    ts = r1.ts; g = r1.gold; f = r1.food;
-    const r2 = aiTurn(ts, "ai2", g, f, addLog, leaders);
-    ts = r2.ts; g = r2.gold; f = r2.food;
+    // AI turns — each country is independent
+    for (const pid of ["ai_mongol", "ai_manchu", "ai_north_china", "ai_india", "ai_persia", "ai_arabia"]) {
+      const r = aiTurn(ts, pid, g, f, addLog, ldr);
+      ts = r.ts; g = r.gold; f = r.food; ldr = r.leaders;
+    }
 
     // Economy processing
-    const { ts: finalTs, ng, nf, ns } = processTurnEnd(ts, g, f, season, addLog, leaders);
+    const { ts: finalTs, ng, nf, ns, nl } = processTurnEnd(ts, g, f, season, addLog, ldr);
 
     const ny = ns === 0 ? year + 1 : year;
     setSeason(ns);
@@ -99,6 +101,7 @@ export function useGameState() {
     setGold(ng);
     setFood(nf);
     setTerrs(finalTs);
+    setLeaders(nl);
     setActions({});
     setAutoManaged(p => {
       const next = {};
@@ -110,7 +113,7 @@ export function useGameState() {
     const pc = finalTs.filter(t => t.owner === "player").length;
     if (pc === 0)  { setPhase("over"); addLog("패배..."); }
     if (pc === 12) { setPhase("over"); addLog("🏆 세계 통일!"); }
-  }, [terrs, gold, food, season, year, addLog]);
+  }, [terrs, gold, food, season, year, leaders, addLog]);
 
   const resetGame = () => {
     setPhase("select");

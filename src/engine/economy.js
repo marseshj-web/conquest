@@ -6,6 +6,7 @@ export function processTurnEnd(terrs, gold, food, season, addLog, leaders = {}) 
   let ts = terrs.map(t => ({ ...t, army: { ...t.army } }));
   const ng = { ...gold };
   const nf = { ...food };
+  let nl = { ...leaders };
 
   // Army food consumption (every turn)
   Object.keys(PLAYERS).forEach(pid => {
@@ -16,6 +17,9 @@ export function processTurnEnd(terrs, gold, food, season, addLog, leaders = {}) 
   });
 
   const ns = (season + 1) % 4;
+
+  // 반란 유예 카운터 감소
+  ts = ts.map(t => t.rebelImmune > 0 ? { ...t, rebelImmune: t.rebelImmune - 1 } : t);
 
   // 매력 패시브: 매 턴 영지 지도자 charm 등급에 따라 민심 소폭 변동
   ts = ts.map(t => {
@@ -67,9 +71,9 @@ export function processTurnEnd(terrs, gold, food, season, addLog, leaders = {}) 
     if ((nf.player || 0) <= 0) addLog("⚠️ 식량 고갈! 병사 이탈 발생!");
   }
 
-  // Rebellion check: mor < 30 → 반란 가능성
+  // Rebellion check: mor < 30 → 반란 가능성 (정복 직후 3턴 유예)
   ts = ts.map(t => {
-    if (!t.owner || t.mor >= 30) return t;
+    if (!t.owner || t.mor >= 30 || t.rebelImmune > 0) return t;
     const chance = (30 - t.mor) * 0.02; // mor=10 → 40%, mor=25 → 10%
     if (Math.random() > chance) return t;
 
@@ -96,6 +100,7 @@ export function processTurnEnd(terrs, gold, food, season, addLog, leaders = {}) 
     } else {
       // 반란 성공 → 공백지
       if (isPlayer) addLog(`💥 ${t.name} 반란 성공! 공백지로 전락 (반란군 ${rebelSize} vs 수비대 ${garrison})`);
+      delete nl[t.id];
       return {
         ...t,
         owner: null,
@@ -110,5 +115,5 @@ export function processTurnEnd(terrs, gold, food, season, addLog, leaders = {}) 
     ? { ...t, army: { ...t.army, infantry: t.army.infantry + rng(10, 25), archer: t.army.archer + rng(5, 15) }, mor: clamp(t.mor + 2, 10, 100) }
     : t);
 
-  return { ts, ng, nf, ns };
+  return { ts, ng, nf, ns, nl };
 }

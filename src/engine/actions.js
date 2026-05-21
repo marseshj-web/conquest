@@ -101,13 +101,14 @@ export function doAttack(state, fromId, toId) {
 
   return {
     battleLog: res.logs,
+    leaders: res.atkWin ? { ...leaders, [toId]: leaders[fromId] } : leaders,
     terrs: terrs.map(t => {
       if (t.id === fromId) return { ...t, army: Object.fromEntries(Object.keys(res.aa).map(k => [k, res.atkWin ? Math.floor(res.aa[k] * 0.6) : res.aa[k]])) };
       if (t.id === toId) {
         if (res.atkWin) {
           const occ = {};
           Object.keys(res.aa).forEach(k => { occ[k] = Math.floor(res.aa[k] * 0.4); });
-          return { ...t, owner: aT.owner, army: occ, mor: clamp(t.mor - 15, 10, 100) };
+          return { ...t, owner: aT.owner, army: occ, rebelImmune: 3 };
         }
         return { ...t, army: { ...res.da } };
       }

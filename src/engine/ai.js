@@ -49,7 +49,9 @@ export function autoManageTurn(ts, autoManagedIds, gold, food, addLog, leaders =
 
 export function aiTurn(ts, pid, gold, food, addLog, leaders = {}) {
   const owned = ts.filter(t => t.owner === pid);
-  if (!owned.length) return { ts, gold, food };
+  if (!owned.length) return { ts, gold, food, leaders };
+
+  let nl = { ...leaders };
 
   let nts = ts.map(t => ({ ...t, army: { ...t.army } }));
   let g = gold[pid] || 0;
@@ -104,7 +106,8 @@ export function aiTurn(ts, pid, gold, food, addLog, leaders = {}) {
         const occ = {};
         Object.keys(res.aa).forEach(k => { occ[k] = Math.floor(res.aa[k] * 0.3); });
         const di = nts.findIndex(t => t.id === p.to);
-        nts[di] = { ...nts[di], owner: pid, army: occ, mor: clamp(nts[di].mor - 15, 10, 100) };
+        nts[di] = { ...nts[di], owner: pid, army: occ, rebelImmune: 3 };
+        nl = { ...nl, [p.to]: nl[p.from] };
         addLog(`⚔️ ${PLAYERS[pid].n}: ${aT.name}→${dT.name} 점령!`);
       } else {
         nts[nts.findIndex(t => t.id === p.to)] = { ...dT, army: { ...res.da } };
@@ -117,5 +120,6 @@ export function aiTurn(ts, pid, gold, food, addLog, leaders = {}) {
     ts: nts,
     gold: { ...gold, [pid]: Math.max(0, g) },
     food: { ...food, [pid]: Math.max(0, f) },
+    leaders: nl,
   };
 }

@@ -2,9 +2,13 @@ export const SEASONS = ["봄", "여름", "가을", "겨울"];
 export const SEASON_COLORS = ["#4ade80", "#fbbf24", "#f97316", "#60a5fa"];
 
 export const PLAYERS = {
-  player: { n: "플레이어", c: "#3b82f6" },
-  ai1:    { n: "몽골 제국",  c: "#ef4444" },
-  ai2:    { n: "이슬람 연맹", c: "#22c55e" },
+  player:         { n: "플레이어",   c: "#3b82f6" },
+  ai_mongol:      { n: "몽골",       c: "#ef4444" },
+  ai_manchu:      { n: "만주국",     c: "#f97316" },
+  ai_north_china: { n: "금나라",     c: "#eab308" },
+  ai_india:       { n: "인도",       c: "#22c55e" },
+  ai_persia:      { n: "페르시아",   c: "#14b8a6" },
+  ai_arabia:      { n: "아라비아",   c: "#a855f7" },
 };
 
 export const FOOD_PER_SOLDIER = 0.5;
@@ -20,8 +24,10 @@ export const COUNTER = { infantry: "cavalry", cavalry: "archer", archer: "infant
 export const COUNTER_MULT = 1.3;
 
 export const INITIAL_RESOURCES = {
-  gold: { player: 500, ai1: 400, ai2: 350 },
-  food: { player: 2000, ai1: 1200, ai2: 1000 },
+  gold: { player: 500, ai_mongol: 280, ai_manchu: 250, ai_north_china: 380,
+          ai_india: 300, ai_persia: 350, ai_arabia: 320 },
+  food: { player: 2000, ai_mongol: 900, ai_manchu: 750, ai_north_china: 850,
+          ai_india: 950, ai_persia: 750, ai_arabia: 650 },
 };
 
 export const START_YEAR = 1206;

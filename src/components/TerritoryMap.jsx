@@ -16,9 +16,22 @@ const SHAPES = {
   japan:        "90,22 99,22 99,46 90,46",
 };
 
-const OWNER_FILL = { player: "#1d4ed8", ai1: "#b91c1c", ai2: "#15803d" };
+const OWNER_FILL = {
+  player:         "#1d4ed8",
+  ai_mongol:      "#b91c1c",
+  ai_manchu:      "#c2410c",
+  ai_north_china: "#a16207",
+  ai_india:       "#15803d",
+  ai_persia:      "#0f766e",
+  ai_arabia:      "#7e22ce",
+};
 const FILL_NEUTRAL = "#57534e";
-const SEA_ROUTES = new Set(["korea-japan", "japan-korea"]);
+const SEA_ROUTES = new Set([
+  "korea-japan", "japan-korea",
+  "north_china-japan", "japan-north_china",
+  "south_china-japan", "japan-south_china",
+  "arabia-west_europe", "west_europe-arabia",
+]);
 
 function polyCenter(pts) {
   const coords = pts.trim().split(" ").map(p => p.split(",").map(Number));

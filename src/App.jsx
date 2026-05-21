@@ -145,7 +145,7 @@ export default function App() {
               <span key={k} style={{ color: v.c }}>●{v.n}({ownerCnt[k] || 0})</span>
             ))}
             <span className="text-slate-500">
-              ●중립({12 - (ownerCnt.player || 0) - (ownerCnt.ai1 || 0) - (ownerCnt.ai2 || 0)})
+              ●중립({12 - Object.values(ownerCnt).reduce((a, b) => a + b, 0)})
             </span>
           </div>
 
