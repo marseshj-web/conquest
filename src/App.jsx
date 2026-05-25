@@ -10,6 +10,7 @@ import DetailView from "./components/DetailView.jsx";
 import BattleLog from "./components/BattleLog.jsx";
 import GameLog from "./components/GameLog.jsx";
 import MerchantModal from "./components/modals/MerchantModal.jsx";
+import DefenseAlert from "./components/DefenseAlert.jsx";
 
 const MOBILE_TABS = [
   ["map",    "🗺️지도"],
@@ -23,12 +24,13 @@ export default function App() {
   const {
     phase, terrs, season, year, gold, food,
     sel, setSel, log, scouted, actions, view, setView,
-    battleLog, modal, setModal,
+    battleLog, defenseBattles, clearDefenseBattles,
+    modal, setModal,
     autoManaged, leaders,
     myTerrs, ownerCnt,
     selectStart, endTurn, resetGame,
     toggleAutoManage,
-    invest, comfort, conscript, transfer, bulkTransfer, attack, trade, scout, surrender,
+    invest, comfort, conscript, transfer, attack, trade, scout, surrender,
   } = gs;
 
   // Close modal when selecting a new territory
@@ -97,7 +99,7 @@ export default function App() {
     gold, food, season, year, actions,
     modal, setModal, setView,
     autoManaged, toggleAutoManage, leaders,
-    invest, comfort, conscript, transfer, bulkTransfer, attack, trade, scout, surrender, endTurn,
+    invest, comfort, conscript, transfer, attack, trade, scout, surrender, endTurn,
   };
 
   const Header = () => (
@@ -130,6 +132,9 @@ export default function App() {
   return (
     <div className="h-screen bg-slate-900 text-slate-200 font-sans text-sm flex flex-col overflow-hidden">
       <Header />
+      {defenseBattles.length > 0 && (
+        <DefenseAlert battles={defenseBattles} onClose={clearDefenseBattles} />
+      )}
 
       {/* ── Desktop layout (md+): 2-column ── */}
       <div className="hidden md:flex flex-1 overflow-hidden">

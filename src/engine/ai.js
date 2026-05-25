@@ -82,6 +82,7 @@ export function aiTurn(ts, pid, gold, food, addLog, leaders = {}) {
   });
 
   // Attack
+  const playerBattles = [];
   if (Math.random() < 0.35) {
     const cands = [];
     owned.forEach(o => {
@@ -99,6 +100,7 @@ export function aiTurn(ts, pid, gold, food, addLog, leaders = {}) {
       const p = cands[0];
       const aT = nts.find(t => t.id === p.from);
       const dT = nts.find(t => t.id === p.to);
+      const isPlayerTerr = dT.owner === "player";
       const res = simBattle(aT, dT, leaders);
 
       nts[nts.findIndex(t => t.id === p.from)] = { ...aT, army: { ...res.aa } };
@@ -113,6 +115,16 @@ export function aiTurn(ts, pid, gold, food, addLog, leaders = {}) {
         nts[nts.findIndex(t => t.id === p.to)] = { ...dT, army: { ...res.da } };
         addLog(`⚔️ ${PLAYERS[pid].n}: ${dT.name} 공격 실패`);
       }
+
+      if (isPlayerTerr) {
+        playerBattles.push({
+          attackerName: PLAYERS[pid].n,
+          fromName: aT.name,
+          toName: dT.name,
+          won: res.atkWin,
+          logs: res.logs,
+        });
+      }
     }
   }
 
@@ -121,5 +133,6 @@ export function aiTurn(ts, pid, gold, food, addLog, leaders = {}) {
     gold: { ...gold, [pid]: Math.max(0, g) },
     food: { ...food, [pid]: Math.max(0, f) },
     leaders: nl,
+    playerBattles,
   };
 }

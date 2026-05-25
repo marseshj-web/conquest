@@ -26,10 +26,11 @@ export function useGameState() {
   const [scouted,   setScouted]   = useState({});
   const [actions,   setActions]   = useState({});
   const [view,      setView]      = useState("map");
-  const [battleLog,    setBattleLog]    = useState(null);
-  const [modal,        setModal]        = useState(null);
-  const [autoManaged,  setAutoManaged]  = useState({});
-  const [leaders,      setLeaders]      = useState({});
+  const [battleLog,      setBattleLog]      = useState(null);
+  const [defenseBattles, setDefenseBattles] = useState([]);
+  const [modal,          setModal]          = useState(null);
+  const [autoManaged,    setAutoManaged]    = useState({});
+  const [leaders,        setLeaders]        = useState({});
 
   const addLog = useCallback(m => setLog(p => [m, ...p].slice(0, 80)), []);
 
@@ -87,10 +88,13 @@ export function useGameState() {
     }
 
     // AI turns — each country is independent
+    const allPlayerBattles = [];
     for (const pid of ["ai_mongol", "ai_manchu", "ai_north_china", "ai_india", "ai_persia", "ai_arabia"]) {
       const r = aiTurn(ts, pid, g, f, addLog, ldr);
       ts = r.ts; g = r.gold; f = r.food; ldr = r.leaders;
+      if (r.playerBattles?.length) allPlayerBattles.push(...r.playerBattles);
     }
+    if (allPlayerBattles.length) setDefenseBattles(allPlayerBattles);
 
     // Economy processing
     const { ts: finalTs, ng, nf, ns, nl } = processTurnEnd(ts, g, f, season, addLog, ldr);
@@ -128,6 +132,7 @@ export function useGameState() {
     setSel(null);
     setModal(null);
     setBattleLog(null);
+    setDefenseBattles([]);
     setAutoManaged({});
     setLeaders({});
   };
@@ -136,7 +141,8 @@ export function useGameState() {
     // State
     phase, terrs, season, year, gold, food,
     sel, setSel, log, scouted, actions, view, setView,
-    battleLog, modal, setModal,
+    battleLog, defenseBattles, clearDefenseBattles: () => setDefenseBattles([]),
+    modal, setModal,
     autoManaged, leaders,
     // Derived
     myTerrs, ownerCnt, selT, actLeft, playerTotalTroops,

@@ -5,7 +5,6 @@ const GRADE_COLOR = { A: "text-yellow-400", B: "text-green-400", C: "text-slate-
 const GRADE_LABEL = { admin: "내정", charm: "매력", war: "전쟁", trade: "무역" };
 import { totalArmy } from "../utils/math.js";
 import TransferModal from "./modals/TransferModal.jsx";
-import BulkTransferModal from "./modals/BulkTransferModal.jsx";
 import ConscriptModal from "./modals/ConscriptModal.jsx";
 import MerchantModal from "./modals/MerchantModal.jsx";
 
@@ -14,7 +13,7 @@ export default function DetailView({
   gold, food, season,
   actions, modal, setModal,
   autoManaged, toggleAutoManage, leaders,
-  invest, comfort, conscript, transfer, bulkTransfer, attack, trade, endTurn,
+  invest, comfort, conscript, transfer, attack, trade, endTurn,
 }) {
   const selT = sel ? terrs.find(t => t.id === sel) : null;
   const actLeft = id => 3 - (actions[id] || 0);
@@ -135,34 +134,37 @@ export default function DetailView({
 
           {/* Transfer / Attack */}
           <div className="mt-1.5 bg-slate-800 rounded-lg p-2.5">
-            <div className="flex justify-between items-center mb-1.5">
-              <div className="font-bold text-xs">🚚 병력이동 · ⚔️ 공격</div>
-              {selT.conn.some(cid => terrs.find(t => t.id === cid)?.owner === "player") && (
-                <button
-                  onClick={() => setModal({ type: "bulkTransfer", from: selT.id })}
-                  disabled={actLeft(selT.id) <= 0}
-                  className={`text-xs rounded px-2 py-0.5 cursor-pointer transition ${
-                    actLeft(selT.id) > 0
-                      ? "bg-blue-800 hover:bg-blue-700 text-blue-300"
-                      : "bg-slate-900 text-slate-600 cursor-not-allowed"
-                  }`}>
-                  일괄이동
-                </button>
-              )}
-            </div>
+            <div className="font-bold text-xs mb-1.5">🚚 병력이동 · ⚔️ 공격</div>
             <div className="flex gap-1.5 flex-wrap">
               {selT.conn.map(cid => {
                 const tgt = terrs.find(t => t.id === cid);
                 const isAlly = tgt?.owner === "player";
+                const canAct = actLeft(selT.id) > 0;
+                if (isAlly) {
+                  return (
+                    <div key={cid} className="flex">
+                      <button
+                        onClick={() => setModal({ type: "transfer", from: selT.id, to: cid })}
+                        className="rounded-l-md px-2.5 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-white cursor-pointer transition">
+                        🚚{tgt.name}
+                        {<span className="text-slate-400 ml-1">({totalArmy(tgt.army)})</span>}
+                      </button>
+                      <button
+                        disabled={!canAct}
+                        onClick={() => transfer(selT.id, cid, { ...selT.army })}
+                        className={`rounded-r-md px-1.5 py-1 text-xs border-l border-slate-600 transition
+                          ${canAct ? "bg-blue-700 hover:bg-blue-600 text-white cursor-pointer" : "bg-slate-900 text-slate-600 cursor-not-allowed"}`}>
+                        전부↗
+                      </button>
+                    </div>
+                  );
+                }
                 return (
                   <button key={cid}
-                    onClick={() => setModal(isAlly
-                      ? { type: "transfer", from: selT.id, to: cid }
-                      : { type: "attack",   from: selT.id, to: cid })}
-                    disabled={!isAlly && actLeft(selT.id) <= 0}
-                    className={`rounded-md px-2.5 py-1 text-xs cursor-pointer transition
-                      ${isAlly ? "bg-slate-700 hover:bg-slate-600 text-white" : "bg-red-950 hover:bg-red-900 text-red-300"}`}>
-                    {isAlly ? "🚚" : "⚔️"}{tgt.name}
+                    onClick={() => setModal({ type: "attack", from: selT.id, to: cid })}
+                    disabled={actLeft(selT.id) <= 0}
+                    className="rounded-md px-2.5 py-1 text-xs cursor-pointer transition bg-red-950 hover:bg-red-900 text-red-300">
+                    ⚔️{tgt.name}
                     {(scouted[cid] || tgt.owner === "player") && (
                       <span className="text-slate-400 ml-1">({totalArmy(tgt.army)})</span>
                     )}
@@ -173,11 +175,6 @@ export default function DetailView({
           </div>
 
           {/* Modals */}
-          {modal?.type === "bulkTransfer" && modal.from === selT.id && (
-            <BulkTransferModal terrs={terrs} fromId={selT.id}
-              onDo={tr => bulkTransfer(selT.id, tr)}
-              onClose={() => setModal(null)} />
-          )}
           {modal?.type === "transfer" && modal.from === selT.id && (
             <TransferModal terrs={terrs} from={modal.from} to={modal.to}
               onDo={tr => transfer(modal.from, modal.to, tr)}

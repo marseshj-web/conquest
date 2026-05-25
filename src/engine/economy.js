@@ -8,15 +8,21 @@ export function processTurnEnd(terrs, gold, food, season, addLog, leaders = {}) 
   const nf = { ...food };
   let nl = { ...leaders };
 
+  const ns = (season + 1) % 4;
+
   // Army food consumption (every turn)
   Object.keys(PLAYERS).forEach(pid => {
     const troops = sum(ts.filter(t => t.owner === pid), t => totalArmy(t.army));
     const consumption = Math.floor(troops * FOOD_PER_SOLDIER);
-    nf[pid] = Math.max(0, (nf[pid] || 0) - consumption);
-    if (pid === "player") addLog(`군량 소비: -${consumption} 식량 (병사 ${troops}명)`);
+    const prevFood = nf[pid] || 0;
+    nf[pid] = Math.max(0, prevFood - consumption);
+    if (pid === "player") {
+      addLog(`군량 소비: -${consumption} 식량 (병사 ${troops}명)`);
+      if (nf[pid] === 0 && prevFood > 0 && ns !== 3) {
+        addLog("⚠️ 식량 고갈! 다음 겨울에 병사 이탈 예정");
+      }
+    }
   });
-
-  const ns = (season + 1) % 4;
 
   // 반란 유예 카운터 감소
   ts = ts.map(t => t.rebelImmune > 0 ? { ...t, rebelImmune: t.rebelImmune - 1 } : t);
@@ -53,9 +59,19 @@ export function processTurnEnd(terrs, gold, food, season, addLog, leaders = {}) 
   }
 
   if (ns === 3) { // 겨울: starvation
+    let playerStarved = false;
     ts = ts.map(t => {
       if (!t.owner) return t;
       if ((nf[t.owner] || 0) > 0) return t;
+      const lostTotal =
+        (t.army.infantry - Math.floor(t.army.infantry * 0.9)) +
+        (t.army.archer   - Math.floor(t.army.archer   * 0.9)) +
+        (t.army.cavalry  - Math.floor(t.army.cavalry  * 0.9)) +
+        (t.army.special  - Math.floor(t.army.special  * 0.9));
+      if (t.owner === "player") {
+        if (lostTotal > 0) addLog(`❄️ ${t.name}: 기근 이탈 -${lostTotal}명, 민심-8`);
+        playerStarved = true;
+      }
       return {
         ...t,
         mor: clamp(t.mor - 8, 10, 100),
@@ -68,7 +84,7 @@ export function processTurnEnd(terrs, gold, food, season, addLog, leaders = {}) 
         },
       };
     });
-    if ((nf.player || 0) <= 0) addLog("⚠️ 식량 고갈! 병사 이탈 발생!");
+    if (playerStarved) addLog("⚠️ 식량 고갈! 겨울 기근 발생!");
   }
 
   // Rebellion check: mor < 30 → 반란 가능성 (정복 직후 3턴 유예)
