@@ -1,19 +1,24 @@
+import { useGeoMap, MAP_W, MAP_H } from './GeoMapBackground.jsx';
 import { PLAYERS } from "../data/constants.js";
 import { totalArmy } from "../utils/math.js";
 
+// Territory polygons repositioned to geographic coordinates.
+// viewBox is MAP_W × MAP_H = 170 × 65, where:
+//   x = longitude + 20   (lon -20° → x=0, lon 150° → x=170)
+//   y = 65 - latitude    (lat 65°N → y=0, lat 0°N → y=65)
 const SHAPES = {
-  west_europe:  "0,14 20,14 20,52 0,52",
-  east_europe:  "20,14 36,14 36,52 20,52",
-  persia:       "36,26 54,26 54,48 36,48",
-  arabia:       "20,48 42,48 42,68 20,68",
-  india:        "42,48 60,48 60,68 42,68",
-  tibet:        "54,26 66,26 66,48 54,48",
-  mongol:       "36,14 70,14 70,26 36,26",
-  north_china:  "66,26 80,26 80,48 66,48",
-  south_china:  "60,48 80,48 80,68 60,68",
-  manchu:       "70,14 86,14 86,26 70,26",
-  korea:        "80,26 90,26 90,44 80,44",
-  japan:        "90,22 99,22 99,46 90,46",
+  west_europe:  "0,9 38,9 38,38 0,38",
+  east_europe:  "38,8 65,8 65,37 38,37",
+  persia:       "65,24 88,24 88,44 65,44",
+  arabia:       "47,44 77,44 77,65 47,65",
+  india:        "77,43 98,43 98,65 77,65",
+  tibet:        "88,24 122,24 122,43 88,43",
+  mongol:       "102,7 134,7 134,23 102,23",
+  north_china:  "122,25 144,25 144,42 122,42",
+  south_china:  "100,42 144,42 144,60 100,60",
+  manchu:       "134,7 152,7 152,23 134,23",
+  korea:        "144,23 157,23 157,41 144,41",
+  japan:        "157,20 170,20 170,47 157,47",
 };
 
 const OWNER_FILL = {
@@ -25,12 +30,13 @@ const OWNER_FILL = {
   ai_persia:      "#0f766e",
   ai_arabia:      "#7e22ce",
 };
-const FILL_NEUTRAL = "#57534e";
+const FILL_NEUTRAL = "#44403c";
+
 const SEA_ROUTES = new Set([
-  "korea-japan", "japan-korea",
+  "korea-japan",       "japan-korea",
   "north_china-japan", "japan-north_china",
   "south_china-japan", "japan-south_china",
-  "arabia-west_europe", "west_europe-arabia",
+  "arabia-west_europe","west_europe-arabia",
 ]);
 
 function polyCenter(pts) {
@@ -48,16 +54,23 @@ function polyDims(pts) {
 }
 
 export default function TerritoryMap({ terrs, sel, setSel, scouted }) {
+  const mapUrl = useGeoMap();
+
   const centers = Object.fromEntries(
     Object.entries(SHAPES).map(([id, pts]) => [id, polyCenter(pts)])
   );
 
   return (
-    <svg viewBox="0 0 100 70" className="w-full" style={{ background: "#0c1a2e" }}>
-      {/* Ocean/sea background hint */}
-      <rect x="0" y="0" width="100" height="70" fill="#0c1a2e" />
+    <svg viewBox={`0 0 ${MAP_W} ${MAP_H}`} className="w-full"
+         style={{ background: "#091624", display: "block" }}>
 
-      {/* Connection lines — drawn behind polygons */}
+      {/* Geographic world map background */}
+      {mapUrl && (
+        <image href={mapUrl} x="0" y="0" width={MAP_W} height={MAP_H}
+               preserveAspectRatio="none" />
+      )}
+
+      {/* Connection lines — behind polygons */}
       {terrs.map(t =>
         t.conn
           .filter(cid => t.id < cid)
@@ -70,9 +83,9 @@ export default function TerritoryMap({ terrs, sel, setSel, scouted }) {
               <line key={key}
                 x1={a.x} y1={a.y} x2={b.x} y2={b.y}
                 stroke="#94a3b8"
-                strokeWidth="0.35"
-                strokeDasharray={isSea ? "1 1" : undefined}
-                opacity="0.5"
+                strokeWidth="0.5"
+                strokeDasharray={isSea ? "1.5 1.5" : undefined}
+                opacity="0.55"
               />
             );
           })
@@ -86,7 +99,7 @@ export default function TerritoryMap({ terrs, sel, setSel, scouted }) {
         const isSelected = sel === t.id;
         const center = centers[t.id];
         const dims = polyDims(pts);
-        const fontSize = Math.min(2.4, dims.h * 0.2, dims.w * 0.13);
+        const fontSize = Math.min(4.5, dims.h * 0.22, dims.w * 0.15);
         const visible = t.owner === "player" || scouted[t.id];
 
         return (
@@ -94,9 +107,9 @@ export default function TerritoryMap({ terrs, sel, setSel, scouted }) {
             <polygon
               points={pts}
               fill={fill}
-              opacity={isSelected ? 1 : 0.82}
+              fillOpacity={isSelected ? 0.75 : 0.55}
               stroke={isSelected ? "#ffffff" : "#0f172a"}
-              strokeWidth={isSelected ? "0.7" : "0.25"}
+              strokeWidth={isSelected ? "1.0" : "0.3"}
             />
             {/* Territory name */}
             <text
