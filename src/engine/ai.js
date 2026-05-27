@@ -82,7 +82,7 @@ export function aiTurn(ts, pid, gold, food, addLog, leaders = {}) {
   });
 
   // Attack
-  const playerBattles = [];
+  let queuedAttack = null;
   if (Math.random() < 0.35) {
     const cands = [];
     owned.forEach(o => {
@@ -100,30 +100,24 @@ export function aiTurn(ts, pid, gold, food, addLog, leaders = {}) {
       const p = cands[0];
       const aT = nts.find(t => t.id === p.from);
       const dT = nts.find(t => t.id === p.to);
-      const isPlayerTerr = dT.owner === "player";
-      const res = simBattle(aT, dT, leaders);
 
-      nts[nts.findIndex(t => t.id === p.from)] = { ...aT, army: { ...res.aa } };
-      if (res.atkWin) {
-        const occ = {};
-        Object.keys(res.aa).forEach(k => { occ[k] = Math.floor(res.aa[k] * 0.3); });
-        const di = nts.findIndex(t => t.id === p.to);
-        nts[di] = { ...nts[di], owner: pid, army: occ, rebelImmune: 3 };
-        nl = { ...nl, [p.to]: nl[p.from] };
-        addLog(`⚔️ ${PLAYERS[pid].n}: ${aT.name}→${dT.name} 점령!`);
+      if (dT.owner === "player") {
+        // Defer player-territory attacks for tactical battle
+        queuedAttack = { fromId: p.from, toId: p.to };
       } else {
-        nts[nts.findIndex(t => t.id === p.to)] = { ...dT, army: { ...res.da } };
-        addLog(`⚔️ ${PLAYERS[pid].n}: ${dT.name} 공격 실패`);
-      }
-
-      if (isPlayerTerr) {
-        playerBattles.push({
-          attackerName: PLAYERS[pid].n,
-          fromName: aT.name,
-          toName: dT.name,
-          won: res.atkWin,
-          logs: res.logs,
-        });
+        const res = simBattle(aT, dT, leaders);
+        nts[nts.findIndex(t => t.id === p.from)] = { ...aT, army: { ...res.aa } };
+        if (res.atkWin) {
+          const occ = {};
+          Object.keys(res.aa).forEach(k => { occ[k] = Math.floor(res.aa[k] * 0.3); });
+          const di = nts.findIndex(t => t.id === p.to);
+          nts[di] = { ...nts[di], owner: pid, army: occ, rebelImmune: 3 };
+          nl = { ...nl, [p.to]: nl[p.from] };
+          addLog(`⚔️ ${PLAYERS[pid].n}: ${aT.name}→${dT.name} 점령!`);
+        } else {
+          nts[nts.findIndex(t => t.id === p.to)] = { ...dT, army: { ...res.da } };
+          addLog(`⚔️ ${PLAYERS[pid].n}: ${dT.name} 공격 실패`);
+        }
       }
     }
   }
@@ -133,6 +127,6 @@ export function aiTurn(ts, pid, gold, food, addLog, leaders = {}) {
     gold: { ...gold, [pid]: Math.max(0, g) },
     food: { ...food, [pid]: Math.max(0, f) },
     leaders: nl,
-    playerBattles,
+    queuedAttack,
   };
 }

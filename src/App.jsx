@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useGameState } from "./hooks/useGameState.js";
 import { PLAYERS, SEASONS, SEASON_COLORS, FOOD_PER_SOLDIER } from "./data/constants.js";
 import { SPECIALS } from "./data/units.js";
@@ -10,7 +10,7 @@ import DetailView from "./components/DetailView.jsx";
 import BattleLog from "./components/BattleLog.jsx";
 import GameLog from "./components/GameLog.jsx";
 import MerchantModal from "./components/modals/MerchantModal.jsx";
-import DefenseAlert from "./components/DefenseAlert.jsx";
+import BattleScene from "./battlesim/components/BattleScene.jsx";
 
 const MOBILE_TABS = [
   ["map",    "🗺️지도"],
@@ -22,18 +22,19 @@ const MOBILE_TABS = [
 export default function App() {
   const gs = useGameState();
   const {
-    phase, terrs, season, year, gold, food,
+    phase, scene, terrs, season, year, gold, food,
     sel, setSel, log, scouted, actions, view, setView,
-    battleLog, defenseBattles, clearDefenseBattles,
+    battleLog, pendingBattle, onBattleComplete, skipTacticalBattle,
     modal, setModal,
     autoManaged, leaders,
     myTerrs, ownerCnt,
     selectStart, endTurn, resetGame,
     toggleAutoManage,
     saveGame, loadGame,
-    invest, comfort, conscript, transfer, attack, trade, scout, surrender,
+    invest, comfort, conscript, transfer, bulkTransfer, attack, trade, scout, surrender,
   } = gs;
 
+  const [readyForBattle, setReadyForBattle] = useState(null);
   const loadFileRef = useRef(null);
 
   // Close modal when selecting a new territory
@@ -76,6 +77,61 @@ export default function App() {
     );
   }
 
+  // ── Tactical battle screen ──────────────────────────────────────
+  if (phase === "play" && scene === "battle" && pendingBattle) {
+    if (readyForBattle !== pendingBattle.key) {
+      const { atkName, defName, isDefensive } = pendingBattle;
+      return (
+        <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center text-slate-200">
+          <div className="text-center p-8 bg-slate-800 rounded-2xl border border-slate-600 max-w-xs w-full mx-4">
+            <div className="text-5xl mb-4">⚔️</div>
+            <div className="text-xl font-bold text-yellow-400 mb-6">전투 발생!</div>
+            {isDefensive && (
+              <div className="text-xs text-orange-400 mb-4 bg-orange-900/30 rounded-lg px-3 py-2">
+                ⚠️ 적군이 우리 영토를 침공했습니다!
+              </div>
+            )}
+            <div className="flex items-center justify-center gap-3 mb-6">
+              <div className="flex-1 text-center">
+                <div className="text-xs text-slate-400 mb-1">공격</div>
+                <div className="text-base font-bold text-red-400">{atkName}</div>
+              </div>
+              <div className="text-slate-500 text-lg font-bold">VS</div>
+              <div className="flex-1 text-center">
+                <div className="text-xs text-slate-400 mb-1">방어</div>
+                <div className="text-base font-bold text-blue-400">{defName}</div>
+              </div>
+            </div>
+            <button
+              onClick={() => setReadyForBattle(pendingBattle.key)}
+              className="w-full bg-red-700 hover:bg-red-600 text-white rounded-xl px-6 py-3 font-bold cursor-pointer text-sm transition"
+            >
+              전투 시작
+            </button>
+            <button
+              onClick={skipTacticalBattle}
+              className="w-full mt-2 text-slate-500 hover:text-slate-300 text-xs py-2 cursor-pointer transition"
+            >
+              전투 스킵 (시뮬레이션)
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center">
+        <BattleScene
+          key={pendingBattle.key}
+          ctx={pendingBattle.ctx}
+          isDefensive={pendingBattle.isDefensive}
+          atkName={pendingBattle.atkName}
+          defName={pendingBattle.defName}
+          onComplete={onBattleComplete}
+        />
+      </div>
+    );
+  }
+
   // ── Game over screen ─────────────────────────────────────────────
   if (phase === "over") {
     const won = terrs.filter(t => t.owner === "player").length === 12;
@@ -102,7 +158,7 @@ export default function App() {
     gold, food, season, year, actions,
     modal, setModal, setView,
     autoManaged, toggleAutoManage, leaders,
-    invest, comfort, conscript, transfer, attack, trade, scout, surrender, endTurn,
+    invest, comfort, conscript, transfer, bulkTransfer, attack, trade, scout, surrender, endTurn,
   };
 
   const Header = () => (
@@ -145,10 +201,6 @@ export default function App() {
       <input ref={loadFileRef} type="file" accept=".json" className="hidden"
         onChange={e => { if (e.target.files[0]) { loadGame(e.target.files[0]); e.target.value = ""; } }} />
       <Header />
-      {defenseBattles.length > 0 && (
-        <DefenseAlert battles={defenseBattles} onClose={clearDefenseBattles} />
-      )}
-
       {/* ── Desktop layout (md+): 2-column ── */}
       <div className="hidden md:flex flex-1 overflow-hidden">
         {/* Left 2/3: map + optional log panels */}
