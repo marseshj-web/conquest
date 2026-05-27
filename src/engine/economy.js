@@ -1,11 +1,12 @@
 import { PLAYERS, FOOD_PER_SOLDIER, GOLD_INCOME_DIV, FOOD_INCOME_DIV } from '../data/constants.js';
 import { GRADE_VALUES } from '../data/leaders.js';
 import { clamp, rng, sum, totalArmy } from '../utils/math.js';
+import { processEvents } from './events.js';
 
 export function processTurnEnd(terrs, gold, food, season, addLog, leaders = {}) {
   let ts = terrs.map(t => ({ ...t, army: { ...t.army } }));
-  const ng = { ...gold };
-  const nf = { ...food };
+  let ng = { ...gold };
+  let nf = { ...food };
   let nl = { ...leaders };
 
   const ns = (season + 1) % 4;
@@ -86,6 +87,9 @@ export function processTurnEnd(terrs, gold, food, season, addLog, leaders = {}) 
     });
     if (playerStarved) addLog("⚠️ 식량 고갈! 겨울 기근 발생!");
   }
+
+  // Random events (per player territory, 20% chance)
+  ({ ts, ng, nf } = processEvents(ts, ng, nf, addLog));
 
   // Rebellion check: mor < 30 → 반란 가능성 (정복 직후 3턴 유예)
   ts = ts.map(t => {
