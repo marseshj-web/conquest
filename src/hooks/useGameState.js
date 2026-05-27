@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useReducer, useCallback, useMemo } from "react";
 import { TERRITORIES_INIT } from "../data/territories.js";
 import { INITIAL_RESOURCES, SEASONS, START_YEAR } from "../data/constants.js";
 import { totalArmy, sum } from "../utils/math.js";
@@ -14,25 +14,164 @@ function freshTerrs() {
   return JSON.parse(JSON.stringify(TERRITORIES_INIT));
 }
 
-export function useGameState() {
-  const [phase,     setPhase]     = useState("select");
-  const [terrs,     setTerrs]     = useState(freshTerrs);
-  const [season,    setSeason]    = useState(0);
-  const [year,      setYear]      = useState(START_YEAR);
-  const [gold,      setGold]      = useState(INITIAL_RESOURCES.gold);
-  const [food,      setFood]      = useState(INITIAL_RESOURCES.food);
-  const [sel,       setSel]       = useState(null);
-  const [log,       setLog]       = useState([]);
-  const [scouted,   setScouted]   = useState({});
-  const [actions,   setActions]   = useState({});
-  const [view,      setView]      = useState("map");
-  const [battleLog,      setBattleLog]      = useState(null);
-  const [defenseBattles, setDefenseBattles] = useState([]);
-  const [modal,          setModal]          = useState(null);
-  const [autoManaged,    setAutoManaged]    = useState({});
-  const [leaders,        setLeaders]        = useState({});
+const INIT = {
+  phase:          "select",
+  terrs:          [],
+  season:         0,
+  year:           START_YEAR,
+  gold:           INITIAL_RESOURCES.gold,
+  food:           INITIAL_RESOURCES.food,
+  sel:            null,
+  log:            [],
+  scouted:        {},
+  actions:        {},
+  view:           "map",
+  battleLog:      null,
+  defenseBattles: [],
+  modal:          null,
+  autoManaged:    {},
+  leaders:        {},
+};
 
-  const addLog = useCallback(m => setLog(p => [m, ...p].slice(0, 80)), []);
+// Merge engine update into state, prepending collected log messages
+function mergeUpdate(state, update, msgs) {
+  const newLog = msgs.length
+    ? [...msgs.reverse(), ...state.log].slice(0, 80)
+    : state.log;
+
+  if (!update) return newLog !== state.log ? { ...state, log: newLog } : state;
+
+  return {
+    ...state,
+    ...(update.terrs     && { terrs:     update.terrs }),
+    ...(update.gold      && { gold:      update.gold }),
+    ...(update.food      && { food:      update.food }),
+    ...(update.actions   && { actions:   update.actions }),
+    ...(update.scouted   && { scouted:   update.scouted }),
+    ...(update.battleLog && { battleLog: update.battleLog }),
+    ...(update.leaders   && { leaders:   update.leaders }),
+    log: newLog,
+  };
+}
+
+function reducer(state, action) {
+  switch (action.type) {
+
+    case "SELECT_START": {
+      const newTerrs = state.terrs.map(t =>
+        t.id === action.id ? { ...t, owner: "player" } : t
+      );
+      return {
+        ...state,
+        terrs:   newTerrs,
+        leaders: assignLeaders(newTerrs),
+        phase:   "play",
+        log:     [`${START_YEAR}년 봄 - ${TERRITORIES_INIT.find(t => t.id === action.id).name}에서 출발!`],
+      };
+    }
+
+    case "TOGGLE_AUTO_MANAGE":
+      return {
+        ...state,
+        autoManaged: { ...state.autoManaged, [action.tid]: !state.autoManaged[action.tid] },
+      };
+
+    case "END_TURN": {
+      const msgs = [];
+      const addLog = msg => msgs.push(msg);
+
+      let ts  = state.terrs.map(t => ({ ...t, army: { ...t.army } }));
+      let g   = { ...state.gold };
+      let f   = { ...state.food };
+      let ldr = { ...state.leaders };
+
+      // Auto-manage player territories
+      const autoIds = Object.keys(state.autoManaged).filter(id => state.autoManaged[id]);
+      if (autoIds.length) {
+        const am = autoManageTurn(ts, autoIds, g, f, addLog, ldr);
+        ts = am.ts; g = am.gold; f = am.food;
+      }
+
+      // AI turns — each country independent
+      const allPlayerBattles = [];
+      for (const pid of ["ai_mongol", "ai_manchu", "ai_north_china", "ai_india", "ai_persia", "ai_arabia"]) {
+        const r = aiTurn(ts, pid, g, f, addLog, ldr);
+        ts = r.ts; g = r.gold; f = r.food; ldr = r.leaders;
+        if (r.playerBattles?.length) allPlayerBattles.push(...r.playerBattles);
+      }
+
+      // Economy processing
+      const { ts: finalTs, ng, nf, ns, nl } = processTurnEnd(ts, g, f, state.season, addLog, ldr);
+      const ny = ns === 0 ? state.year + 1 : state.year;
+      addLog(`--- ${ny}년 ${SEASONS[ns]} ---`);
+
+      const pc = finalTs.filter(t => t.owner === "player").length;
+      if (pc === 0)  addLog("패배...");
+      if (pc === 12) addLog("🏆 세계 통일!");
+
+      const nextAutoManaged = {};
+      Object.keys(state.autoManaged).forEach(id => { if (state.autoManaged[id]) nextAutoManaged[id] = true; });
+
+      return {
+        ...state,
+        terrs:          finalTs,
+        gold:           ng,
+        food:           nf,
+        season:         ns,
+        year:           ny,
+        leaders:        nl,
+        actions:        {},
+        autoManaged:    nextAutoManaged,
+        defenseBattles: allPlayerBattles,
+        phase:          pc === 0 || pc === 12 ? "over" : "play",
+        log:            [...msgs.reverse(), ...state.log].slice(0, 80),
+      };
+    }
+
+    case "ACTION": {
+      const msgs = [];
+      const addLog = msg => msgs.push(msg);
+      const s = {
+        terrs: state.terrs, gold: state.gold, food: state.food,
+        actions: state.actions, scouted: state.scouted,
+        leaders: state.leaders, sel: state.sel, addLog,
+      };
+      const update = action.fn(s);
+      const next   = mergeUpdate(state, update, msgs);
+      return {
+        ...next,
+        ...(action.closeModal           && { modal: null }),
+        ...(action.setViewOnSuccess && update && { view: action.setViewOnSuccess }),
+      };
+    }
+
+    case "SET":
+      return { ...state, [action.key]: action.value };
+
+    case "RESET":
+      return { ...INIT, terrs: freshTerrs() };
+
+    case "LOAD_SAVE":
+      return {
+        ...INIT,
+        ...action.data,
+        sel: null, view: "map", battleLog: null, defenseBattles: [], modal: null,
+      };
+
+    default:
+      return state;
+  }
+}
+
+export function useGameState() {
+  const [state, dispatch] = useReducer(reducer, INIT, s => ({ ...s, terrs: freshTerrs() }));
+
+  const {
+    phase, terrs, season, year, gold, food,
+    sel, log, scouted, actions, view,
+    battleLog, defenseBattles, modal,
+    autoManaged, leaders,
+  } = state;
 
   const myTerrs  = useMemo(() => terrs.filter(t => t.owner === "player"), [terrs]);
   const ownerCnt = useMemo(() => {
@@ -41,124 +180,71 @@ export function useGameState() {
     return c;
   }, [terrs]);
 
-  const selT    = terrs.find(t => t.id === sel);
-  const actLeft = id => 3 - (actions[id] || 0);
-
+  const selT              = terrs.find(t => t.id === sel);
+  const actLeft           = id => 3 - (actions[id] || 0);
   const playerTotalTroops = pid => sum(terrs.filter(t => t.owner === pid), t => totalArmy(t.army));
 
-  // Apply partial state updates from action functions
-  const applyUpdate = useCallback(update => {
-    if (!update) return;
-    if (update.terrs)     setTerrs(update.terrs);
-    if (update.gold)      setGold(update.gold);
-    if (update.food)      setFood(update.food);
-    if (update.actions)   setActions(update.actions);
-    if (update.scouted)   setScouted(update.scouted);
-    if (update.battleLog) setBattleLog(update.battleLog);
-    if (update.leaders)   setLeaders(update.leaders);
+  const setSel              = useCallback(id => dispatch({ type: "SET", key: "sel",            value: id }), []);
+  const setView             = useCallback(v  => dispatch({ type: "SET", key: "view",           value: v  }), []);
+  const setModal            = useCallback(m  => dispatch({ type: "SET", key: "modal",          value: m  }), []);
+  const clearDefenseBattles = useCallback(() => dispatch({ type: "SET", key: "defenseBattles", value: [] }), []);
+
+  const selectStart      = useCallback(id  => dispatch({ type: "SELECT_START",       id  }), []);
+  const toggleAutoManage = useCallback(tid => dispatch({ type: "TOGGLE_AUTO_MANAGE", tid }), []);
+  const endTurn          = useCallback(()  => dispatch({ type: "END_TURN"                }), []);
+  const resetGame        = useCallback(()  => dispatch({ type: "RESET"                   }), []);
+
+  const saveGame = useCallback(() => {
+    const data = {
+      version: 1,
+      savedAt: new Date().toISOString(),
+      phase, terrs, season, year, gold, food,
+      log, scouted, actions, autoManaged, leaders,
+    };
+    const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `conquer_${year}년${SEASONS[season]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [phase, terrs, season, year, gold, food, log, scouted, actions, autoManaged, leaders]);
+
+  const loadGame = useCallback(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (data.version !== 1) { alert("지원하지 않는 세이브 파일 버전입니다."); return; }
+        dispatch({ type: "LOAD_SAVE", data });
+      } catch {
+        alert("세이브 파일을 읽을 수 없습니다.");
+      }
+    };
+    reader.readAsText(file);
   }, []);
-
-  const buildState = useCallback(() => ({
-    terrs, gold, food, actions, scouted, leaders, sel, addLog,
-  }), [terrs, gold, food, actions, scouted, leaders, sel, addLog]);
-
-  const selectStart = id => {
-    const newTerrs = terrs.map(t => t.id === id ? { ...t, owner: "player" } : t);
-    setTerrs(newTerrs);
-    setLeaders(assignLeaders(newTerrs));
-    setPhase("play");
-    addLog(`${START_YEAR}년 봄 - ${TERRITORIES_INIT.find(t => t.id === id).name}에서 출발!`);
-  };
-
-  const toggleAutoManage = useCallback(tid => {
-    setAutoManaged(p => ({ ...p, [tid]: !p[tid] }));
-  }, []);
-
-  const endTurn = useCallback(() => {
-    let ts = terrs.map(t => ({ ...t, army: { ...t.army } }));
-    let g = { ...gold };
-    let f = { ...food };
-    let ldr = { ...leaders };
-
-    // Auto-manage player territories
-    const autoIds = Object.keys(autoManaged).filter(id => autoManaged[id]);
-    if (autoIds.length) {
-      const am = autoManageTurn(ts, autoIds, g, f, addLog, ldr);
-      ts = am.ts; g = am.gold; f = am.food;
-    }
-
-    // AI turns — each country is independent
-    const allPlayerBattles = [];
-    for (const pid of ["ai_mongol", "ai_manchu", "ai_north_china", "ai_india", "ai_persia", "ai_arabia"]) {
-      const r = aiTurn(ts, pid, g, f, addLog, ldr);
-      ts = r.ts; g = r.gold; f = r.food; ldr = r.leaders;
-      if (r.playerBattles?.length) allPlayerBattles.push(...r.playerBattles);
-    }
-    if (allPlayerBattles.length) setDefenseBattles(allPlayerBattles);
-
-    // Economy processing
-    const { ts: finalTs, ng, nf, ns, nl } = processTurnEnd(ts, g, f, season, addLog, ldr);
-
-    const ny = ns === 0 ? year + 1 : year;
-    setSeason(ns);
-    setYear(ny);
-    setGold(ng);
-    setFood(nf);
-    setTerrs(finalTs);
-    setLeaders(nl);
-    setActions({});
-    setAutoManaged(p => {
-      const next = {};
-      Object.keys(p).forEach(id => { if (p[id]) next[id] = true; });
-      return next;
-    });
-    addLog(`--- ${ny}년 ${SEASONS[ns]} ---`);
-
-    const pc = finalTs.filter(t => t.owner === "player").length;
-    if (pc === 0)  { setPhase("over"); addLog("패배..."); }
-    if (pc === 12) { setPhase("over"); addLog("🏆 세계 통일!"); }
-  }, [terrs, gold, food, season, year, leaders, addLog]);
-
-  const resetGame = () => {
-    setPhase("select");
-    setTerrs(freshTerrs());
-    setSeason(0);
-    setYear(START_YEAR);
-    setGold(INITIAL_RESOURCES.gold);
-    setFood(INITIAL_RESOURCES.food);
-    setLog([]);
-    setScouted({});
-    setActions({});
-    setSel(null);
-    setModal(null);
-    setBattleLog(null);
-    setDefenseBattles([]);
-    setAutoManaged({});
-    setLeaders({});
-  };
 
   return {
     // State
     phase, terrs, season, year, gold, food,
     sel, setSel, log, scouted, actions, view, setView,
-    battleLog, defenseBattles, clearDefenseBattles: () => setDefenseBattles([]),
+    battleLog, defenseBattles, clearDefenseBattles,
     modal, setModal,
     autoManaged, leaders,
     // Derived
     myTerrs, ownerCnt, selT, actLeft, playerTotalTroops,
-    // Actions (wrap engine functions)
-    selectStart,
-    endTurn,
-    resetGame,
-    toggleAutoManage,
-    invest:       (tid, type)               => applyUpdate(doInvest(buildState(), tid, type)),
-    comfort:      tid                       => applyUpdate(doComfort(buildState(), tid)),
-    conscript:    (tid, unitKey)            => applyUpdate(doConscript(buildState(), tid, unitKey)),
-    transfer:     (fromId, toId, transfers) => { applyUpdate(doTransfer(buildState(), fromId, toId, transfers)); setModal(null); },
-    bulkTransfer: (fromId, transfersMap)    => { applyUpdate(doBulkTransfer(buildState(), fromId, transfersMap)); setModal(null); },
-    attack:       (fromId, toId)            => { const u = doAttack(buildState(), fromId, toId); applyUpdate(u); if (u) setView("battle"); setModal(null); },
-    trade:        (type, amount)            => applyUpdate(doTrade(buildState(), type, amount)),
-    scout:        tid                       => applyUpdate(doScout(buildState(), tid)),
-    surrender:    tid                       => applyUpdate(doSurrender(buildState(), tid)),
+    // Game flow
+    selectStart, endTurn, resetGame, toggleAutoManage,
+    saveGame, loadGame,
+    // Engine actions
+    invest:       (tid, type)               => dispatch({ type: "ACTION", fn: s => doInvest(s, tid, type) }),
+    comfort:      tid                       => dispatch({ type: "ACTION", fn: s => doComfort(s, tid) }),
+    conscript:    (tid, unitKey)            => dispatch({ type: "ACTION", fn: s => doConscript(s, tid, unitKey) }),
+    transfer:     (fromId, toId, transfers) => dispatch({ type: "ACTION", fn: s => doTransfer(s, fromId, toId, transfers),  closeModal: true }),
+    bulkTransfer: (fromId, transfersMap)    => dispatch({ type: "ACTION", fn: s => doBulkTransfer(s, fromId, transfersMap), closeModal: true }),
+    attack:       (fromId, toId)            => dispatch({ type: "ACTION", fn: s => doAttack(s, fromId, toId),   closeModal: true, setViewOnSuccess: "battle" }),
+    trade:        (type, amount)            => dispatch({ type: "ACTION", fn: s => doTrade(s, type, amount) }),
+    scout:        tid                       => dispatch({ type: "ACTION", fn: s => doScout(s, tid) }),
+    surrender:    tid                       => dispatch({ type: "ACTION", fn: s => doSurrender(s, tid) }),
   };
 }

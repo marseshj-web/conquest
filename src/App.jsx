@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { useGameState } from "./hooks/useGameState.js";
 import { PLAYERS, SEASONS, SEASON_COLORS, FOOD_PER_SOLDIER } from "./data/constants.js";
 import { SPECIALS } from "./data/units.js";
@@ -30,8 +30,11 @@ export default function App() {
     myTerrs, ownerCnt,
     selectStart, endTurn, resetGame,
     toggleAutoManage,
+    saveGame, loadGame,
     invest, comfort, conscript, transfer, attack, trade, scout, surrender,
   } = gs;
+
+  const loadFileRef = useRef(null);
 
   // Close modal when selecting a new territory
   const handleSel = useCallback(id => {
@@ -112,15 +115,23 @@ export default function App() {
         <span className="text-green-400">🌾{food.player}</span>
         <span className="text-red-300">(-{foodBurn}/턴)</span>
         <span className="text-blue-400">🏰{myTerrs.length}</span>
-        {/* Desktop log/battle toggle buttons */}
-        <div className="hidden md:flex gap-1 ml-2">
+        <div className="flex gap-1 ml-2">
+          <button onClick={saveGame} title="세이브"
+            className="px-2 py-0.5 rounded text-xs cursor-pointer transition bg-slate-700 hover:bg-green-700 text-slate-300 hover:text-white">
+            💾
+          </button>
+          <button onClick={() => loadFileRef.current?.click()} title="로드"
+            className="px-2 py-0.5 rounded text-xs cursor-pointer transition bg-slate-700 hover:bg-blue-700 text-slate-300 hover:text-white">
+            📂
+          </button>
+          {/* Desktop log/battle toggle buttons */}
           <button onClick={() => setView(view === "battle" ? "map" : "battle")}
-            className={`px-2 py-0.5 rounded text-xs cursor-pointer transition
+            className={`hidden md:block px-2 py-0.5 rounded text-xs cursor-pointer transition
               ${view === "battle" ? "bg-yellow-700 text-yellow-200" : "bg-slate-700 hover:bg-slate-600 text-slate-300"}`}>
             ⚔️
           </button>
           <button onClick={() => setView(view === "log" ? "map" : "log")}
-            className={`px-2 py-0.5 rounded text-xs cursor-pointer transition
+            className={`hidden md:block px-2 py-0.5 rounded text-xs cursor-pointer transition
               ${view === "log" ? "bg-slate-500 text-white" : "bg-slate-700 hover:bg-slate-600 text-slate-300"}`}>
             📜
           </button>
@@ -131,6 +142,8 @@ export default function App() {
 
   return (
     <div className="h-screen bg-slate-900 text-slate-200 font-sans text-sm flex flex-col overflow-hidden">
+      <input ref={loadFileRef} type="file" accept=".json" className="hidden"
+        onChange={e => { if (e.target.files[0]) { loadGame(e.target.files[0]); e.target.value = ""; } }} />
       <Header />
       {defenseBattles.length > 0 && (
         <DefenseAlert battles={defenseBattles} onClose={clearDefenseBattles} />
